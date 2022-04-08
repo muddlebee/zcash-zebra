@@ -68,10 +68,17 @@ pub struct DiskDb {
 ///
 /// [`rocksdb::WriteBatch`] is a batched set of database updates,
 /// which must be written to the database using `DiskDb::write(batch)`.
+//
+// TODO: move DiskDb, FinalizedBlock, and the source String into this struct,
+//       (DiskDb can be cloned),
+//       and make them accessible via read-only methods
 #[must_use = "batches must be written to the database"]
 pub struct DiskWriteBatch {
     /// The inner RocksDB write batch.
     batch: rocksdb::WriteBatch,
+
+    /// The configured network.
+    network: Network,
 }
 
 /// Helper trait for inserting (Key, Value) pairs into rocksdb with a consistently
@@ -298,10 +305,23 @@ impl ReadDisk for DiskDb {
 }
 
 impl DiskWriteBatch {
-    pub fn new() -> Self {
+    /// Creates and returns a new transactional batch write.
+    ///
+    /// # Correctness
+    ///
+    /// Each block must be written to the state inside a batch, so that:
+    /// - concurrent `ReadStateService` queries don't see half-written blocks, and
+    /// - if Zebra calls `exit`, panics, or crashes, half-written blocks are rolled back.
+    pub fn new(network: Network) -> Self {
         DiskWriteBatch {
             batch: rocksdb::WriteBatch::default(),
+            network,
         }
+    }
+
+    /// Returns the configured network for this write batch.
+    pub fn network(&self) -> Network {
+        self.network
     }
 }
 
@@ -344,7 +364,13 @@ impl DiskDb {
             // TODO: rename to tx_loc_by_hash (#3151)
             rocksdb::ColumnFamilyDescriptor::new("tx_by_hash", db_options.clone()),
             // Transparent
+            rocksdb::ColumnFamilyDescriptor::new("balance_by_transparent_addr", db_options.clone()),
+            // TODO: #3954
+            //rocksdb::ColumnFamilyDescriptor::new("tx_by_transparent_addr_loc", db_options.clone()),
+            // TODO: rename to utxo_by_out_loc (#3953)
             rocksdb::ColumnFamilyDescriptor::new("utxo_by_outpoint", db_options.clone()),
+            // TODO: #3952
+            //rocksdb::ColumnFamilyDescriptor::new("utxo_by_transparent_addr_loc", db_options.clone()),
             // Sprout
             rocksdb::ColumnFamilyDescriptor::new("sprout_nullifiers", db_options.clone()),
             rocksdb::ColumnFamilyDescriptor::new("sprout_anchors", db_options.clone()),
@@ -433,11 +459,18 @@ impl DiskDb {
         opts.create_missing_column_families(true);
 
         // Use the recommended Ribbon filter setting for all column families.
-        // (Ribbon filters are faster than Bloom filters in Zebra, as of April 2022.)
         //
+        // Ribbon filters are faster than Bloom filters in Zebra, as of April 2022.
         // (They aren't needed for single-valued column families, but they don't hurt either.)
         block_based_opts.set_ribbon_filter(9.9);
 
+        // Use the recommended LZ4 compression type.
+        //
+        // https://github.com/facebook/rocksdb/wiki/Compression#configuration
+        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+
+        // Increase the process open file limit if needed,
+        // then use it to set RocksDB's limit.
         let open_file_limit = DiskDb::increase_open_file_limit();
         let db_file_limit = DiskDb::get_db_open_file_limit(open_file_limit);
 

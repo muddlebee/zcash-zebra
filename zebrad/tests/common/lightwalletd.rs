@@ -7,6 +7,8 @@
 
 use std::{env, net::SocketAddr, path::Path};
 
+use indexmap::IndexMap;
+
 use zebra_test::{
     command::{TestChild, TestDirExt},
     net::random_known_port,
@@ -78,7 +80,7 @@ where
     /// # Panics
     ///
     /// If there is no lightwalletd config in the test directory.
-    fn spawn_lightwalletd_child(self, args: &[&str]) -> Result<TestChild<Self>>;
+    fn spawn_lightwalletd_child(self, extra_args: &[&str]) -> Result<TestChild<Self>>;
 
     /// Create a config file and use it for all subsequently spawned `lightwalletd` processes.
     /// Returns an error if the config already exists.
@@ -103,33 +105,62 @@ where
 
         // By default, launch a working test instance with logging,
         // and avoid port conflicts.
-        let mut args: Vec<_> = vec![
-            // the fake zcashd conf we just wrote
-            "--zcash-conf-path",
-            default_config_path
-                .as_path()
-                .to_str()
-                .expect("Path is valid Unicode"),
-            // the lightwalletd cache directory
-            //
-            // TODO: create a sub-directory for lightwalletd
+        let mut args_map = IndexMap::new();
+
+        // the fake zcashd conf we just wrote
+        let zcash_conf_path = default_config_path
+            .as_path()
+            .to_str()
+            .expect("Path is valid Unicode");
+        args_map.insert("--zcash-conf-path", Some(zcash_conf_path));
+
+        // the lightwalletd cache directory
+        //
+        // TODO: create a sub-directory for lightwalletd
+        args_map.insert(
             "--data-dir",
-            dir.to_str().expect("Path is valid Unicode"),
-            // log to standard output
-            //
-            // TODO: if lightwalletd needs to run on Windows,
-            //       work out how to log to the terminal on all platforms
-            "--log-file",
-            "/dev/stdout",
-            // let the OS choose a random available wallet client port
-            "--grpc-bind-addr",
-            "127.0.0.1:0",
-            "--http-bind-addr",
-            "127.0.0.1:0",
-            // don't require a TLS certificate for the HTTP server
-            "--no-tls-very-insecure",
-        ];
-        args.extend_from_slice(extra_args);
+            Some(dir.to_str().expect("Path is valid Unicode")),
+        );
+
+        // log to standard output
+        //
+        // TODO: if lightwalletd needs to run on Windows,
+        //       work out how to log to the terminal on all platforms
+        args_map.insert("--log-file", Some("/dev/stdout"));
+
+        // let the OS choose a random available wallet client port
+        args_map.insert("--grpc-bind-addr", Some("127.0.0.1:0"));
+        args_map.insert("--http-bind-addr", Some("127.0.0.1:0"));
+
+        // don't require a TLS certificate for the HTTP server
+        args_map.insert("--no-tls-very-insecure", None);
+
+        // apply user provided arguments
+        let mut extra_args = extra_args.iter().peekable();
+        while let Some(parameter) = extra_args.next() {
+            if parameter.starts_with('-') {
+                if let Some(argument) = extra_args.peek() {
+                    if argument.starts_with('-') {
+                        args_map.insert(parameter, None);
+                    } else {
+                        args_map.insert(parameter, Some(*argument));
+                        let _ = extra_args.next();
+                    }
+                }
+            } else {
+                args_map.insert(parameter, None);
+            }
+        }
+
+        let mut args = Vec::with_capacity(args_map.len() * 2);
+
+        for (parameter, maybe_argument) in args_map {
+            args.push(parameter);
+
+            if let Some(argument) = maybe_argument {
+                args.push(argument);
+            }
+        }
 
         self.spawn_child_with_command("lightwalletd", &args)
     }

@@ -35,14 +35,14 @@ use color_eyre::{
 };
 use tempfile::TempDir;
 use tokio::fs;
-use tower::util::BoxService;
+use tower::{util::BoxService, Service};
 
 use zebra_chain::{
     block,
     parameters::Network::{self, *},
 };
 use zebra_network::constants::PORT_IN_USE_ERROR;
-use zebra_state::constants::LOCK_FILE_ERROR;
+use zebra_state::{constants::LOCK_FILE_ERROR, ChainTipChange, LatestChainTip};
 
 use zebra_test::{
     command::{ContextFrom, NO_MATCHES_REGEX_ITER},
@@ -1486,6 +1486,30 @@ where
 /// Type alias for a boxed state service.
 type BoxStateService =
     BoxService<zebra_state::Request, zebra_state::Response, zebra_state::BoxError>;
+
+/// Starts a state service using the provided `cache_dir` as the directory with the chain state.
+async fn start_state_service(
+    network: Network,
+    cache_dir: impl Into<PathBuf>,
+) -> Result<(
+    BoxStateService,
+    impl Service<
+        zebra_state::ReadRequest,
+        Response = zebra_state::ReadResponse,
+        Error = zebra_state::BoxError,
+    >,
+    LatestChainTip,
+    ChainTipChange,
+)> {
+    let config = zebra_state::Config {
+        cache_dir: cache_dir.into(),
+        ..zebra_state::Config::default()
+    };
+
+    remove_file_if_it_exists(config.db_path(network).join("LOCK")).await?;
+
+    Ok(zebra_state::init(config, network))
+}
 
 /// Recursively copy a chain state directory into a new temporary directory.
 async fn copy_state_directory(source: impl AsRef<Path>) -> Result<TempDir> {

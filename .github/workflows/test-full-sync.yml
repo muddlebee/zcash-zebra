@@ -56,6 +56,7 @@ jobs:
 
       - name: Get state version from constants.rs
         run: |
+          cat $GITHUB_WORKSPACE/zebra-state/src/constants.rs
           STATE_VERSION=$(grep -oE "DATABASE_FORMAT_VERSION: .* (\d+)" $GITHUB_WORKSPACE/zebra-state/src/constants.rs | grep -oE "[0-9]+" | tail -n1)
           echo $STATE_VERSION
 

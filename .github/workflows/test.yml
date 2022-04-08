@@ -42,10 +42,50 @@ env:
   IMAGE_NAME: zebrad-test
 
 jobs:
+  state:
+    name: Compare state versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - uses: actions/checkout@v3.0.0
+        with:
+          persist-credentials: false
+
+      # Setup gcloud CLI
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v0.7.0
+        with:
+          workload_identity_provider: 'projects/143793276228/locations/global/workloadIdentityPools/github-actions/providers/github-oidc'
+          service_account: 'github-service-account@zealous-zebra.iam.gserviceaccount.com'
+          token_format: 'access_token'
+
+      - name: Compare state version from constants.rs and gcloud
+        run: |
+          LOCAL_STATE_VERSION=$(grep -oE "DATABASE_FORMAT_VERSION: .* [0-9]+" $GITHUB_WORKSPACE/zebra-state/src/constants.rs | grep -oE "[0-9]+" | tail -n1)
+          echo "LOCAL_STATE_VERSION: $LOCAL_STATE_VERSION"
+
+          GCP_STATE_VERSION=$(gcloud compute images list --filter="name~zebrad-cache AND name~-v" --format="value(NAME)" --sort-by=~creationTimestamp --limit=1 | grep -oE 'v[0-9]+' | grep -oE '[0-9]+')
+          echo "GCP_STATE_VERSION: $GCP_STATE_VERSION"
+
+          if [[ "$LOCAL_STATE_VERSION" =! "$GCP_STATE_VERSION" ]]; then exit 1
+
+      - name: Get disk state name from gcloud
+        id: get-disk-name
+        if: ${{ needs.regenerate-stateful-disks.outputs.any_changed != 'true' || github.event.inputs.regenerate-disks != 'true'}}
+        run: |
+          output=$(gcloud compute images list --filter="zebrad-cache" --format="value(NAME)" --sort-by=~creationTimestamp --limit=1)
+          echo "Disk: $output"
+          echo "Description: $(gcloud compute images describe $output --format='value(DESCRIPTION)')"
+          echo "::set-output name=sha::$output"
+
   build:
     name: Build images
     timeout-minutes: 210
     runs-on: ubuntu-latest
+    needs: [state]
     permissions:
       contents: 'read'
       id-token: 'write'

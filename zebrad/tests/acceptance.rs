@@ -25,6 +25,7 @@ use std::{
     collections::HashSet,
     convert::TryInto,
     env, io,
+    net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -1664,6 +1665,33 @@ async fn start_state_service(
     remove_file_if_it_exists(config.db_path(network).join("LOCK")).await?;
 
     Ok(zebra_state::init(config, network))
+}
+
+/// Spawns a zebrad instance to interact with lightwalletd, but without an internet connection.
+///
+/// This prevents it from downloading blocks. Instead, the `zebra_directory` parameter allows
+/// providing an initial state to the zebrad instance.
+fn spawn_zebrad_for_rpc_without_initial_peers(
+    zebra_directory: TempDir,
+) -> Result<(TestChild<TempDir>, SocketAddr)> {
+    let mut config = random_known_rpc_port_config()
+        .expect("Failed to create a config file with a known RPC listener port");
+
+    config.state.ephemeral = false;
+    config.network.initial_mainnet_peers = HashSet::new();
+    config.network.initial_testnet_peers = HashSet::new();
+
+    let mut zebrad = zebra_directory
+        .with_config(&mut config)?
+        .spawn_child(&["start"])?
+        .with_timeout(Duration::from_secs(60 * 60));
+
+    let rpc_address = config.rpc.listen_addr.unwrap();
+
+    zebrad.expect_stdout_line_matches(&format!("Opened RPC endpoint at {}", rpc_address))?;
+    zebrad.expect_stdout_line_matches("activating mempool")?;
+
+    Ok((zebrad, rpc_address))
 }
 
 /// Recursively copy a chain state directory into a new temporary directory.

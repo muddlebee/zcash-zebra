@@ -9,22 +9,23 @@ on:
         type: boolean
         default: false
         description: Just update stateful disks
-  pull_request:
-    branches:
-      - main
-    paths:
-      # code and tests
-      - '**/*.rs'
-      # hard-coded checkpoints and proptest regressions
-      - '**/*.txt'
-      # test data snapshots
-      - '**/*.snap'
-      # dependencies
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-      # workflow definitions
-      - 'docker/**'
-      - '.github/workflows/test.yml'
+  push:
+  # pull_request:
+  #   branches:
+  #     - main
+  #   paths:
+  #     # code and tests
+  #     - '**/*.rs'
+  #     # hard-coded checkpoints and proptest regressions
+  #     - '**/*.txt'
+  #     # test data snapshots
+  #     - '**/*.snap'
+  #     # dependencies
+  #     - '**/Cargo.toml'
+  #     - '**/Cargo.lock'
+  #     # workflow definitions
+  #     - 'docker/**'
+  #     - '.github/workflows/test.yml'
 
 env:
   CARGO_INCREMENTAL: '1'

@@ -71,7 +71,7 @@ jobs:
           GCP_STATE_VERSION=$(gcloud compute images list --filter="name~zebrad-cache AND name~-v" --format="value(NAME)" --sort-by=~creationTimestamp --limit=1 | grep -oE "v[0-9]+" | grep -oE "[0-9]+")
           echo "GCP_STATE_VERSION: $GCP_STATE_VERSION"
 
-          if [[ "$LOCAL_STATE_VERSION" -lt "$GCP_STATE_VERSION" ]]; then exit 1
+          if [[ "$LOCAL_STATE_VERSION" -lt "$GCP_STATE_VERSION" ]]; then exit 1; fi
 
       - name: Get disk state name from gcloud
         id: get-disk-name

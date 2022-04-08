@@ -5,9 +5,10 @@ on:
     inputs:
       network:
         default: 'Mainnet'
+  # pull_request:
+  #   branches:
+  #     - main
   push:
-    branches:
-      - main
     paths:
       # code and tests (including full sync acceptance test changes)
       # TODO: ignore changes in test code that isn't used in the full sync test

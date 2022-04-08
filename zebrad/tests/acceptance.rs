@@ -35,6 +35,7 @@ use color_eyre::{
 };
 use tempfile::TempDir;
 use tokio::fs;
+use tower::util::BoxService;
 
 use zebra_chain::{
     block,
@@ -1481,6 +1482,10 @@ where
 
     Ok(())
 }
+
+/// Type alias for a boxed state service.
+type BoxStateService =
+    BoxService<zebra_state::Request, zebra_state::Response, zebra_state::BoxError>;
 
 /// Recursively copy a chain state directory into a new temporary directory.
 async fn copy_state_directory(source: impl AsRef<Path>) -> Result<TempDir> {

@@ -380,7 +380,7 @@ pub enum Request {
     },
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// A read-only query about the chain state, via the [`ReadStateService`].
 pub enum ReadRequest {
     /// Looks up a block by hash or height in the current best chain.
@@ -401,4 +401,12 @@ pub enum ReadRequest {
     /// * [`Response::Transaction(Some(Arc<Transaction>))`](Response::Transaction) if the transaction is in the best chain;
     /// * [`Response::Transaction(None)`](Response::Transaction) otherwise.
     Transaction(transaction::Hash),
+
+    /// Looks up utxos for the provided addresses.
+    ///
+    /// Returns
+    ///
+    /// * A vector of utxo data.
+    /// * An empty vector if no utxo was found for the given addresses.
+    UtxosByAddresses(Vec<transparent::Address>),
 }

@@ -39,6 +39,8 @@ mod tests;
 
 pub(super) use zebra_db::ZebraDb;
 
+pub(super) use disk_format::transparent::OutputLocation;
+
 /// The finalized part of the chain state, stored in the db.
 #[derive(Debug)]
 pub struct FinalizedState {

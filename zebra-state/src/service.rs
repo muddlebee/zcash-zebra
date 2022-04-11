@@ -55,7 +55,7 @@ pub mod watch_receiver;
 
 pub(crate) mod check;
 
-mod finalized_state;
+pub(crate) mod finalized_state;
 mod non_finalized_state;
 mod pending_utxos;
 mod read;
@@ -74,6 +74,12 @@ pub type QueuedFinalized = (
     FinalizedBlock,
     oneshot::Sender<Result<block::Hash, BoxError>>,
 );
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct UtxoAddressLocation {
+    pub address: transparent::Address,
+    pub output_location: finalized_state::OutputLocation,
+}
 
 /// A read-write service for Zebra's cached blockchain state.
 ///
@@ -976,6 +982,29 @@ impl Service<ReadRequest> for ReadStateService {
                         });
 
                     Ok(ReadResponse::Transaction(transaction_and_height))
+                }
+                .boxed()
+            }
+
+            // For the get_address_utxos RPC.
+            ReadRequest::UtxosByAddresses(_addresses) => {
+                metrics::counter!(
+                    "state.requests",
+                    1,
+                    "service" => "read_state",
+                    "type" => "utxos_by_addresses",
+                );
+
+                let _state = self.clone();
+
+                async move {
+                    // TODO: Respond with found utxos
+                    // At least the following pull requests should be merged:
+                    // - #4022
+                    // - #4038
+                    // Do the corresponding update in the context of #3158
+                    let utxos = vec![];
+                    Ok(ReadResponse::Utxos(utxos))
                 }
                 .boxed()
             }

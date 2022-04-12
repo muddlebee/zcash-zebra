@@ -22,6 +22,7 @@ use zebra_chain::{
     parameters::{ConsensusBranchId, Network, NetworkUpgrade},
     serialization::{SerializationError, ZcashDeserialize},
     transaction::{self, SerializedTransaction, Transaction},
+    transparent,
 };
 use zebra_network::constants::USER_AGENT;
 use zebra_node_services::{mempool, BoxError};
@@ -63,6 +64,22 @@ pub trait Rpc {
     /// [required for lightwalletd support.](https://github.com/zcash/lightwalletd/blob/v0.4.9/common/common.go#L72-L89)
     #[rpc(name = "getblockchaininfo")]
     fn get_blockchain_info(&self) -> Result<GetBlockChainInfo>;
+
+    /// Returns the total balance of a provided `addresses` in an [`AddressBalance`] instance.
+    ///
+    /// # Parameters
+    ///
+    /// - `addresses`: (array of strings) A list of base-58 encoded addresses.
+    ///
+    /// # Notes
+    ///
+    /// zcashd also accepts a single string parameter instead of an array of strings, but Zebra
+    /// doesn't because lightwalletd always calls this RPC with an array of addresses.
+    ///
+    /// zcashd also returns the total amount of Zatoshis received by the addresses, but Zebra
+    /// doesn't because lightwalletd doesn't use that information.
+    #[rpc(name = "getaddressbalance")]
+    fn get_address_balance(&self, addresses: Vec<String>) -> BoxFuture<Result<AddressBalance>>;
 
     /// Sends the raw bytes of a signed transaction to the local node's mempool, if the transaction is valid.
     /// Returns the [`SentTransactionHash`] for the transaction, as a JSON string.
@@ -320,6 +337,38 @@ where
         };
 
         Ok(response)
+    }
+
+    fn get_address_balance(&self, addresses: Vec<String>) -> BoxFuture<Result<AddressBalance>> {
+        let state = self.state.clone();
+
+        async move {
+            let addresses: Vec<transparent::Address> = addresses
+                .into_iter()
+                .map(|address| {
+                    address.parse().map_err(|error| {
+                        Error::invalid_params(&format!("invalid address {address:?}: {error}"))
+                    })
+                })
+                .collect()?;
+
+            let mut balance = AddressBalance::zero();
+
+            for address in addresses {
+                let request = zebra_state::ReadRequest::AddressBalance(address);
+                let response = state.ready().await?.call(request).await?;
+
+                match response {
+                    zebra_state::ReadResponse::AddressBalance(address_balance) => {
+                        balance += address_balance;
+                    }
+                    _ => unreachable!("Unexpected response from state service: {response:?}"),
+                }
+            }
+
+            Ok(balance)
+        }
+        .boxed()
     }
 
     fn send_raw_transaction(

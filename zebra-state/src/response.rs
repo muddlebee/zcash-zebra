@@ -1,10 +1,10 @@
 //! State [`tower::Service`] response types.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use zebra_chain::{
     block::{self, Block},
-    transaction::{Hash, Transaction},
+    transaction::{self, Transaction},
     transparent,
 };
 
@@ -12,6 +12,7 @@ use zebra_chain::{
 // will work with inline links.
 #[allow(unused_imports)]
 use crate::Request;
+use crate::TransactionLocation;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A response to a [`StateService`] [`Request`].
@@ -54,7 +55,7 @@ pub enum ReadResponse {
     /// Response to [`ReadRequest::Transaction`] with the specified transaction.
     Transaction(Option<(Arc<Transaction>, block::Height)>),
 
-    /// Response to [`ReadRequest::TransactionsByAddresses`] with the obtained transaction ids,
+    /// Response to [`ReadRequest::TransactionIdsByAddresses`] with the obtained transaction ids,
     /// in the order they appear in blocks.
-    TransactionIds(Vec<Hash>),
+    AddressesTransactionIds(BTreeMap<TransactionLocation, transaction::Hash>),
 }
